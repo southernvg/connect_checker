@@ -4,7 +4,8 @@
 # INTERVAL (seconds between pings), PING_TOKEN (required if the server has one).
 set -u
 
-CLIENT_ID="${CLIENT_ID:-macbook-1}"
+# The ID defaults to this machine's short hostname (e.g. "chris-mbp").
+CLIENT_ID="${CLIENT_ID:-$(hostname -s 2>/dev/null || hostname)}"
 SERVER_URL="${SERVER_URL:-http://127.0.0.1:8080}"
 INTERVAL="${INTERVAL:-300}"
 PING_TOKEN="${PING_TOKEN:-}"
