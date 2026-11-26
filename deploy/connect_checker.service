@@ -1,0 +1,22 @@
+[Unit]
+Description=connect_checker ping server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# ADDR and PING_TOKEN live in the env file, which only root can read.
+EnvironmentFile=/etc/connect_checker.env
+ExecStart=/usr/local/bin/connect_checker -addr ${ADDR} -db /var/lib/connect_checker/pings.db
+Restart=on-failure
+RestartSec=2
+
+# Run as a throwaway unprivileged user; systemd owns /var/lib/connect_checker.
+DynamicUser=yes
+StateDirectory=connect_checker
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target
