@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"time"
@@ -66,6 +67,7 @@ type indexData struct {
 	Pings   []ping        // newest pings across all IDs
 	Limit   int
 	Now     time.Time
+	Version string
 }
 
 type server struct {
@@ -73,6 +75,35 @@ type server struct {
 	db         *sql.DB
 	staleAfter time.Duration
 }
+
+// version is the git commit the binary was built from, e.g. "15d5c47" or
+// "15d5c47-dirty" for a build with uncommitted changes. The Go toolchain
+// records this for `go build` inside a git checkout; `go run` does not, so
+// it reports "dev".
+var version = func() string {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return "dev"
+	}
+	var rev, dirty string
+	for _, s := range info.Settings {
+		switch s.Key {
+		case "vcs.revision":
+			rev = s.Value
+		case "vcs.modified":
+			if s.Value == "true" {
+				dirty = "-dirty"
+			}
+		}
+	}
+	if rev == "" {
+		return "dev"
+	}
+	if len(rev) > 7 {
+		rev = rev[:7]
+	}
+	return rev + dirty
+}()
 
 // span renders a duration compactly, e.g. "42s", "5m", "2h 13m", "3d 4h".
 func span(d time.Duration) string {
@@ -154,6 +185,7 @@ var indexTmpl = template.Must(template.New("index").Parse(`<!doctype html>
   .ip { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85rem; }
   td.ip { color: var(--muted); white-space: nowrap; }
   .empty { background: var(--card); border: 1px dashed var(--line); border-radius: 12px; padding: 2.5rem 1rem; text-align: center; color: var(--muted); }
+  footer { margin-top: 2rem; text-align: center; color: var(--muted); font-size: .8rem; }
   code { background: var(--bg); padding: .1rem .35rem; border-radius: 4px; }
 
   /* Phones: tighter spacing, and each table row becomes a stacked block
@@ -225,6 +257,7 @@ var indexTmpl = template.Must(template.New("index").Parse(`<!doctype html>
 <h2>Pings</h2>
 <div class="empty">No pings received yet. Run <code>./client/ping.sh</code> to send one.</div>
 {{end}}
+<footer>connect_checker · build <span class="ip">{{.Version}}</span></footer>
 </main>
 </body>
 </html>
@@ -423,7 +456,7 @@ func (s *server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	data := indexData{Limit: recentLimit, Now: time.Now()}
+	data := indexData{Limit: recentLimit, Now: time.Now(), Version: version}
 	var err error
 	data.Pings, err = s.queryPings(r.Context(), data.Now,
 		`SELECT client_id, status, received_at, ip FROM pings ORDER BY id DESC LIMIT ?`,
@@ -467,6 +500,6 @@ func main() {
 	mux.HandleFunc("/ping", s.handlePing)
 	mux.HandleFunc("/", s.handleIndex)
 
-	log.Printf("listening on http://%s (db: %s)", *addr, *dbPath)
+	log.Printf("listening on http://%s (db: %s, build: %s)", *addr, *dbPath, version)
 	log.Fatal(http.ListenAndServe(*addr, mux))
 }

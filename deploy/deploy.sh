@@ -2,15 +2,22 @@
 # Builds the server for Linux and installs it on a droplet as a systemd service.
 #
 #   ./deploy/deploy.sh root@203.0.113.10
+#   ./deploy/deploy.sh --reset-db root@203.0.113.10   # also delete all stored pings
 #
 # Safe to re-run: it replaces the binary and restarts the service, and keeps
-# the existing database and ping token. Needs SSH access as root or as a user
+# the existing database and ping token. --reset-db permanently deletes the
+# droplet's pings.db (no backup is taken); the token is kept. Needs SSH access as root or as a user
 # with passwordless sudo. Set PORT to listen on something other than 8080
 # (only applied on the first deploy; edit /etc/connect_checker.env afterwards).
 set -eu
 
-if [ $# -ne 1 ]; then
-	echo "usage: $0 user@host" >&2
+reset_db=0
+if [ "${1:-}" = "--reset-db" ]; then
+	reset_db=1
+	shift
+fi
+if [ $# -ne 1 ] || [ "${1#-}" != "$1" ]; then
+	echo "usage: $0 [--reset-db] user@host" >&2
 	exit 2
 fi
 target="$1"
@@ -33,7 +40,7 @@ scp -q "bin/connect_checker-linux-$goarch" "$target:/tmp/connect_checker.new"
 scp -q deploy/connect_checker.service "$target:/tmp/connect_checker.service.new"
 
 echo "==> installing"
-ssh "$target" "PORT='$PORT' sh -s" <<'REMOTE'
+ssh "$target" "PORT='$PORT' RESET_DB='$reset_db' sh -s" <<'REMOTE'
 set -eu
 if [ "$(id -u)" -eq 0 ]; then sudo=""; else sudo="sudo"; fi
 
@@ -50,6 +57,13 @@ fi
 
 $sudo systemctl daemon-reload
 $sudo systemctl enable --quiet connect_checker
+if [ "$RESET_DB" = 1 ]; then
+	# Stop first so the server is not holding the files, then remove the
+	# database and its SQLite side files. The server recreates it on start.
+	$sudo systemctl stop connect_checker
+	$sudo sh -c 'rm -f /var/lib/connect_checker/pings.db*'
+	echo "    database reset: all stored pings deleted"
+fi
 $sudo systemctl restart connect_checker
 
 # Open the port if the droplet's own firewall is on.

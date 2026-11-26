@@ -25,6 +25,7 @@ Deploy to a DigitalOcean droplet (or any systemd Linux host reachable over SSH):
 
 ```sh
 ./deploy/deploy.sh root@<droplet-ip>   # cross-compiles, uploads, installs and restarts the service
+./deploy/deploy.sh --reset-db root@<droplet-ip>   # same, and deletes all pings stored on the droplet
 ssh root@<droplet-ip> journalctl -u connect_checker -f
 ```
 
@@ -41,3 +42,4 @@ There are no tests yet. To check a change, run the server against a throwaway `-
 - **Stale IDs:** a card turns red when its ID's last ping is older than `-stale` (default 11m, i.e. two missed 5-minute pings). "Ago" text is computed server-side at render time; the page meta-refreshes every 30s rather than using JavaScript.
 - **Status is free text, with one convention:** the server stores `status` verbatim, but the battery stat parses a leading `NN%` (`batteryRE`). Keep the client's status starting with the percentage, or update both sides together.
 - **Index page layout:** all HTML and CSS live in `indexTmpl` in `server/main.go`. Below 640px the ping table is restyled by CSS into stacked rows (the header row, `tr.head`, is hidden), so a new column needs a `grid-area` in that media query as well as a `<td>`.
+- **Build hash in the footer:** `version` reads the commit from the VCS info the Go toolchain embeds (`debug.ReadBuildInfo`), with no `-ldflags`. It shows the short hash, `-dirty` when built with uncommitted changes, and `dev` under `go run` (which embeds no VCS info) — so commit before deploying to get a clean hash.
